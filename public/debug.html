@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CS2 GSI 抓包 / 校准</title>
+<link rel="icon" href="cs2bh.ico">
+<style>
+  :root{
+    --bg:#0c0e13; --card:rgba(22,25,32,.94); --line:rgba(255,255,255,.09);
+    --txt:#e9ecf2; --muted:#8b93a5; --dim:#616a7d;
+    --good:#3ecf8e; --warn:#f0a83a; --bad:#ef5f5f; --info:#4a9eff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);font-family:"Segoe UI","PingFang SC",system-ui,sans-serif;font-size:14px;padding:18px;line-height:1.55}
+  .wrap{max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+  h1{font-size:18px;font-weight:600}
+  .sub{color:var(--muted);font-size:13px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .card h2{font-size:13px;font-weight:500;color:var(--dim);letter-spacing:.05em;text-transform:uppercase;margin-bottom:10px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  td,th{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--dim);font-weight:500;font-size:12px}
+  tr:last-child td{border-bottom:none}
+  .ok{color:var(--good)}
+  .no{color:var(--bad)}
+  .na{color:var(--dim)}
+  code,.mono{font-family:Consolas,"SF Mono",monospace;font-size:12.5px}
+  pre{background:#0a0c10;border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto;max-height:340px;font-family:Consolas,monospace;font-size:12px;color:#c8d0dd;white-space:pre-wrap;word-break:break-all}
+  .stat{display:flex;gap:18px;flex-wrap:wrap;font-size:13px}
+  .stat div{color:var(--muted)}
+  .stat b{color:var(--txt);font-weight:500}
+  .note{font-size:12.5px;color:var(--warn);background:rgba(240,168,58,.08);border:1px solid rgba(240,168,58,.25);border-radius:8px;padding:10px 12px}
+  .rowbtn{display:flex;gap:10px;align-items:center;margin-top:8px}
+  button{background:#232833;color:var(--txt);border:1px solid var(--line);border-radius:7px;padding:6px 13px;font-size:13px;cursor:pointer;font-family:inherit}
+  button:hover{background:#2c323f}
+  .seq{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .chip{font-family:Consolas,monospace;font-size:12px;padding:3px 8px;border-radius:6px;border:1px solid var(--line);background:#151922;color:var(--muted)}
+  .chip.win{border-color:rgba(240,168,58,.5);background:rgba(240,168,58,.12);color:var(--warn)}
+  .chip.lose{border-color:rgba(74,158,255,.4);background:rgba(74,158,255,.1);color:var(--info)}
+  .chip.unknown{border-style:dashed;color:var(--dim)}
+  .chip.now{border-color:rgba(255,255,255,.55);color:var(--txt);font-weight:600}
+  .whylist{margin-top:10px;font-size:12.5px;color:var(--muted);padding-left:18px;display:flex;flex-direction:column;gap:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <h1>CS2 GSI 抓包 / 校准</h1>
+    <div class="sub">用这一页确认「你实际能拿到哪些字段」。打一局 5E，回来看下面的表 —— 特别是 <code>money</code> 和 <code>allplayers</code>。</div>
+  </div>
+
+  <div class="card">
+    <h2>接收状态</h2>
+    <div class="stat">
+      <div>收到包数 <b id="sCount">0</b></div>
+      <div>最后接收 <b id="sLast">—</b></div>
+      <div>解析失败 <b id="sErr">0</b></div>
+      <div>连接 <b id="sConn">—</b></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>服务端合并状态（增量包 / 阶段性重置）</h2>
+    <div class="stat">
+      <div>累计合并帧 <b id="mFrames">0</b></div>
+      <div>其中增量帧 <b id="mDeltas">0</b></div>
+      <div>状态重置 <b id="mResets">0</b></div>
+      <div>回合切换清理 <b id="mRoundClears">0</b></div>
+      <div>最近重置原因 <b id="mResetWhy">—</b></div>
+      <div>当前阶段 <b id="mStage">—</b></div>
+    </div>
+    <div class="note" style="margin-top:10px">
+      配置里开了 buffer / throttle，GSI 只推变化的分量。服务端会把它们累积成完整状态再分析，
+      所以「累计合并帧」应该等于「收到包数」，而界面上的回合号 / 阵营不会因为增量帧变成 0 / 未定。
+      如果这里出现「增量帧」很多但界面数据正常，说明合并生效了。
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>日志与隐私（比赛数据不留盘）</h2>
+    <div class="stat">
+      <div>日志写入 <b id="lgEnabled">—</b></div>
+      <div>当前文件 <b id="lgFile">—</b></div>
+      <div>自动清理 <b id="lgPolicy">—</b></div>
+      <div>距清理还有 <b id="lgCountdown">—</b></div>
+      <div>已清理文件 <b id="lgDeleted">0</b></div>
+      <div>最近清理原因 <b id="lgWhy">—</b></div>
+    </div>
+    <div class="rowbtn" style="margin-top:10px">
+      <button id="btnPurge">立即清空日志</button>
+    </div>
+    <div class="note" style="margin-top:10px">
+      日志里是完整的比赛原始数据（双方比分、你自己的资金曲线、装备、steamid），只在事后校准时有价值。
+      默认「空闲 5 分钟既没有新帧、也没有新回合推进」就把 <code>logs/</code> 里的文件删干净，
+      服务启动时也会先清掉不是今天的残留。
+      想改：<code>CS2BH_LOG_IDLE_MIN=15</code> 改间隔、<code>CS2BH_LOG_IDLE_MIN=0</code> 关掉自动清理、
+      <code>CS2BH_LOG=0</code> 完全不写日志、<code>CS2BH_LOG_DIR=路径</code> 换目录。
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>对手经济推算（重建出的胜负序列）</h2>
+    <div class="stat">
+      <div>对手阵营 <b id="enFoe">—</b></div>
+      <div>置信度 <b id="enConf2">—</b></div>
+      <div>序列覆盖 <b id="enCoverage">—</b></div>
+      <div>人均收入下界 <b id="enIncome">—</b></div>
+      <div>资金上界 <b id="enCeil2">—</b></div>
+      <div>对手连败 <b id="enStreak">—</b></div>
+      <div>本回合若输可得 <b id="enIfLose2">—</b></div>
+    </div>
+    <div class="seq" id="enSeq"><span class="chip unknown">等待数据…</span></div>
+    <div class="note" style="margin-top:10px" id="enVerdict2">—</div>
+    <ul class="whylist" id="enWhyList"></ul>
+    <div class="note" style="margin-top:10px">
+      这一块是「服务端到底怎么推出来的」，看得见就不用猜。要点：
+      <b>能推的只有收入侧</b>（双方比分 + 连败数 GSI 给了，CS 的收入是固定阶梯，可以硬算）；
+      <b>推不出来的有支出侧</b>（GSI 不下发对手钱包、也不下发对手买了什么）。
+      所以「余额精确值」拿不到 —— 而且<b>余额低不等于没装备</b>，对手刚满买完余额当然低，身上却是一整套枪。
+      真正能下硬结论的是<b>资金上界</b>：假设对手一分钱都没花、还额外算上击杀奖励上限，
+      连这个上界都低于买枪门槛时，「对面这回合不可能有长枪」就是确定结论。
+      算法全在 <code>lib/enemy.js</code>。
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>关键字段可得性</h2>
+    <table id="fieldTable">
+      <thead><tr><th style="width:46%">字段</th><th style="width:16%">状态</th><th>实际值 / 说明</th></tr></thead>
+      <tbody><tr><td colspan="3" class="na">等待数据…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>allplayers 明细（10 人数据是否下发给客户端）</h2>
+    <table id="allTable">
+      <thead><tr><th>玩家</th><th>队伍</th><th>金钱</th><th>血量</th><th>主武器</th></tr></thead>
+      <tbody><tr><td colspan="5" class="na">等待数据…</td></tr></tbody>
+    </table>
+    <div class="note" id="allNote">若这里只有 1 行或为空，说明你当前（亲自游玩）状态下 GSI 没有下发全队数据，本工具会自动退化为「推算模式」。</div>
+  </div>
+
+  <div class="card">
+    <h2>原始数据 / 合并后状态</h2>
+    <div class="rowbtn">
+      <button id="btnToggle">当前显示：合并后状态（点此切换原始帧）</button>
+      <button id="btnCopy">复制 JSON</button>
+      <button id="btnLogs">查看今日日志文件</button>
+    </div>
+    <div class="note" style="margin-top:10px" id="viewNote">
+      显示的是「累积合并后的完整状态」—— 分析引擎用的就是它。
+      最新一帧原始数据常常是个增量帧（不含 map / round / player.state），
+      看它容易误判成「字段缺失」，所以默认看合并后的。
+    </div>
+    <pre id="rawBox" style="margin-top:10px">等待数据…</pre>
+  </div>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+
+  function fmtTime(ts) {
+    if (!ts) return '—';
+    var d = new Date(ts);
+    return d.toLocaleTimeString('zh-CN', { hour12: false });
+  }
+
+  function has(obj, path) {
+    var cur = obj;
+    var parts = path.split('.');
+    for (var i = 0; i < parts.length; i++) {
+      if (cur === null || cur === undefined || typeof cur !== 'object') return undefined;
+      cur = cur[parts[i]];
+    }
+    return cur;
+  }
+
+  function cell(ok, text) {
+    return '<span class="' + (ok === true ? 'ok' : ok === false ? 'no' : 'na') + '">' + text + '</span>';
+  }
+
+  function renderFields(raw) {
+    var tbody = $('fieldTable').querySelector('tbody');
+    if (!raw) { tbody.innerHTML = '<tr><td colspan="3" class="na">等待数据…</td></tr>'; return; }
+
+    var all = raw.allplayers || {};
+    var allIds = Object.keys(all);
+    var allWithMoney = allIds.filter(function (id) { return all[id] && all[id].state && typeof all[id].state.money === 'number'; });
+    var roundIdx = has(raw, 'map.round');
+
+    var rows = [
+      ['player.state.money（你自己的钱）', has(raw, 'player.state.money'), has(raw, 'player.state.money')],
+      ['player.state.health / armor / helmet', has(raw, 'player.state.health') !== undefined, 'health=' + has(raw, 'player.state.health') + ' armor=' + has(raw, 'player.state.armor') + ' helmet=' + has(raw, 'player.state.helmet')],
+      ['player.state.defusekit（拆弹器）', has(raw, 'player.state.defusekit') !== undefined, has(raw, 'player.state.defusekit')],
+      ['player.weapons（你的武器清单）', has(raw, 'player.weapons') !== undefined, Object.keys(has(raw, 'player.weapons') || {}).length + ' 项'],
+      ['player.team（你所在阵营）', has(raw, 'player.team') !== undefined, has(raw, 'player.team')],
+      ['map.phase（比赛阶段）', has(raw, 'map.phase') !== undefined, has(raw, 'map.phase')],
+      ['map.mode（游戏模式）', has(raw, 'map.mode') !== undefined, has(raw, 'map.mode')],
+      ['map.round（回合索引，0 基）', roundIdx !== undefined, (roundIdx !== undefined && roundIdx !== null ? roundIdx + '  → 当前第 ' + (Number(roundIdx) + 1) + ' 回合（手枪局是 0 和 12）' : '—')],
+      ['map.team_ct / team_t 比分', has(raw, 'map.team_ct.score') !== undefined, 'CT ' + has(raw, 'map.team_ct.score') + ' : ' + has(raw, 'map.team_t.score') + ' T'],
+      ['consecutive_round_losses（连败计数）', has(raw, 'map.team_ct.consecutive_round_losses') !== undefined, 'CT=' + has(raw, 'map.team_ct.consecutive_round_losses') + ' T=' + has(raw, 'map.team_t.consecutive_round_losses')],
+      ['round.phase（回合阶段）', has(raw, 'round.phase') !== undefined, has(raw, 'round.phase')],
+      ['bomb（炸弹状态）', has(raw, 'bomb.state') !== undefined, has(raw, 'bomb.state')],
+      ['allplayers（全队数据）', allIds.length >= 2, allIds.length + ' 人，其中 ' + allWithMoney.length + ' 人有 money 字段']
+    ];
+
+    tbody.innerHTML = rows.map(function (r) {
+      var ok = r[1] === true || (typeof r[1] === 'number');
+      var status = (r[1] === undefined || r[1] === null) ? cell(null, '缺失') : cell(ok ? true : false, ok ? '有' : '无');
+      return '<tr><td class="mono">' + r[0] + '</td><td>' + status + '</td><td class="mono">' + (r[2] === undefined || r[2] === null ? '—' : r[2]) + '</td></tr>';
+    }).join('');
+  }
+
+  function renderAll(raw) {
+    var tbody = $('allTable').querySelector('tbody');
+    if (!raw || !raw.allplayers) {
+      tbody.innerHTML = '<tr><td colspan="5" class="na">等待数据…</td></tr>';
+      return;
+    }
+    var ids = Object.keys(raw.allplayers);
+    if (!ids.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="na">目前还没有 allplayers 数据</td></tr>';
+      return;
+    }
+    tbody.innerHTML = ids.map(function (id) {
+      var p = raw.allplayers[id] || {};
+      var st = p.state || {};
+      var gun = '—';
+      var ws = p.weapons || {};
+      Object.keys(ws).forEach(function (k) {
+        var t = ws[k] && ws[k].type;
+        if (t === 'Rifle' || t === 'SniperRifle' || t === 'Submachine Gun' || t === 'Machine Gun') {
+          gun = ws[k].name || k;
+        }
+      });
+      var m = typeof st.money === 'number' ? '$' + st.money : '<span class="no">无</span>';
+      return '<tr><td>' + (p.name || id) + '</td><td>' + (p.team || '—') + '</td><td class="mono">' + m + '</td><td class="mono">' + (st.health !== undefined ? st.health : '—') + '</td><td>' + gun + '</td></tr>';
+    }).join('');
+  }
+
+  function moneyOrDash(v) {
+    if (typeof v !== 'number' || !isFinite(v)) return '—';
+    return '$' + Math.round(v).toLocaleString('en-US');
+  }
+
+  /**
+   * 对手经济推算卡。
+   * 胜负序列是重点：它把「服务端凭什么说对面赢了几局」直接摆出来，
+   * 序列错了（比如那个 off-by-one）一眼就能看出来。
+   */
+  function renderEnemy(a) {
+    var seqBox = $('enSeq');
+    var en = (a && a.enemy) || {};
+
+    $('enFoe').textContent = en.foe || '—';
+    $('enConf2').textContent = en.available
+      ? ({ high: '确定', mid: '推算', low: '数据不全' }[en.conf] || en.conf || '—')
+      : '不可用';
+    $('enCoverage').textContent = (typeof en.coverage === 'number' && en.seq && en.seq.length)
+      ? (Math.round(en.coverage * 100) + '%（' + en.seq.length + ' 回合）')
+      : '—';
+    $('enIncome').textContent = moneyOrDash(en.income);
+    $('enCeil2').textContent = moneyOrDash(en.cashCeil);
+    $('enStreak').textContent = (typeof en.streak === 'number') ? (en.streak + ' 局') : '—';
+    $('enIfLose2').textContent = moneyOrDash(en.ifLoseNow);
+    $('enVerdict2').textContent = en.verdict || (en.why && en.why[0]) || '—';
+
+    // 胜负序列：从对手视角看，赢 = 他们有钱，输 = 他们穷
+    seqBox.innerHTML = '';
+    var seq = en.seq || [];
+    if (!en.available || !seq.length) {
+      var ph = document.createElement('span');
+      ph.className = 'chip unknown';
+      ph.textContent = en.available ? '本半场还没走完回合' : '暂无可推数据';
+      seqBox.appendChild(ph);
+    } else {
+      var mine = en.foe === 'CT' ? 'T' : 'CT';
+      seq.forEach(function (s) {
+        var c = document.createElement('span');
+        if (s.winner === en.foe) { c.className = 'chip win'; c.textContent = 'R' + (s.round + 1) + ' 对手胜'; }
+        else if (s.winner === mine) { c.className = 'chip lose'; c.textContent = 'R' + (s.round + 1) + ' 对手负'; }
+        else { c.className = 'chip unknown'; c.textContent = 'R' + (s.round + 1) + ' 未知'; }
+        seqBox.appendChild(c);
+      });
+      var nxt = document.createElement('span');
+      nxt.className = 'chip now';
+      nxt.textContent = 'R' + (a.roundIndex + 1) + ' 本回合';
+      seqBox.appendChild(nxt);
+    }
+
+    var ul = $('enWhyList');
+    ul.innerHTML = '';
+    (en.why || []).forEach(function (t) {
+      var li = document.createElement('li');
+      li.textContent = t;
+      ul.appendChild(li);
+    });
+  }
+
+  var view = 'merged';
+  var lastData = null;
+
+  function paint() {
+    if (!lastData) return;
+    var src = (view === 'merged' ? lastData.mergedState : lastData.raw) || {};
+    renderFields(src);
+    renderAll(src);
+    $('rawBox').textContent = JSON.stringify(src, null, 2);
+    $('viewNote').innerHTML = view === 'merged'
+      ? '显示的是「累积合并后的完整状态」—— 分析引擎用的就是它。最新一帧原始数据常常是个增量帧（不含 map / round / player.state），看它容易误判成「字段缺失」。'
+      : '显示的是「最新一帧原始数据」。注意它很可能是个增量帧：只包含这次变化的分量，缺失字段不代表 GSI 不给。要判断字段可得性请看合并后的状态。';
+  }
+
+  function pull() {
+    fetch('/state').then(function (r) { return r.json(); }).then(function (d) {
+      lastData = d;
+      $('sCount').textContent = d.stats.payloads;
+      $('sLast').textContent = fmtTime(d.stats.lastAt);
+      $('sErr').textContent = d.stats.parseErrors;
+
+      var m = d.merged || {};
+      $('mFrames').textContent = m.frames || 0;
+      $('mDeltas').textContent = d.stats.deltas || 0;
+      $('mResets').textContent = m.resets || 0;
+      $('mRoundClears').textContent = m.roundClears || 0;
+      $('mResetWhy').textContent = m.lastResetReason || '—';
+      var a = d.analysis;
+      var stage = a
+        ? (a.inWarmup ? (a.notInMatchLabel || '热身中') + '（不参与判断）'
+                      : (a.mapName || '?') + ' · 第 ' + a.roundNum + ' 回合 · 对手' +
+                        ((a.enemy && a.enemy.tierLabel) ? a.enemy.tierLabel : '待推'))
+        : '还没有数据';
+      // 休闲模式阵亡后旁观 / 接手机器人时，GSI 的 player 块会变成别人 ——
+      // 这里明示出来，免得看到「我的钱」突然变了以为是 bug（那份数据在 playerObserved 里）
+      if (a && a.spectating && a.observed) {
+        stage += ' · 正在旁观 ' + a.observed.name + '(' + (a.observed.team || '?') +
+          ' $' + a.observed.money + ' K' + a.observed.kills + ')';
+      }
+      $('mStage').textContent = stage;
+
+      var lg = d.log || {};
+      $('lgEnabled').textContent = lg.enabled === false ? '已关闭' : '开启';
+      $('lgFile').textContent = lg.file || '—';
+      $('lgPolicy').textContent = lg.enabled === false
+        ? '不写日志'
+        : (lg.idleMinutes > 0 ? ('空闲 ' + lg.idleMinutes + ' 分钟即清空') : '自动清理已关闭');
+      $('lgCountdown').textContent = (lg.purgeInSeconds === null || lg.purgeInSeconds === undefined)
+        ? (lg.enabled === false ? '—' : '未计时')
+        : (lg.purgeInSeconds + ' 秒');
+      $('lgDeleted').textContent = lg.deletedFiles || 0;
+      $('lgWhy').textContent = lg.lastPurgeReason || '—';
+
+      renderEnemy(a);
+      paint();
+    }).catch(function () {});
+  }
+
+  $('btnToggle').onclick = function () {
+    view = view === 'merged' ? 'raw' : 'merged';
+    $('btnToggle').textContent = view === 'merged'
+      ? '当前显示：合并后状态（点此切换原始帧）'
+      : '当前显示：最新原始帧（点此切换合并后）';
+    paint();
+  };
+
+  $('btnCopy').onclick = function () {
+    var txt = $('rawBox').textContent;
+    navigator.clipboard.writeText(txt).then(function () {
+      $('btnCopy').textContent = '已复制';
+      setTimeout(function () { $('btnCopy').textContent = '复制 JSON'; }, 1500);
+    });
+  };
+
+  $('btnLogs').onclick = function () {
+    fetch('/logs').then(function (r) { return r.json(); }).then(function (files) {
+      if (!files.length) { alert('logs 目录还没有文件'); return; }
+      alert('日志文件（在 logs 目录下）：\n' + files.join('\n') + '\n\n浏览器可访问 /logs/' + files[0]);
+    });
+  };
+
+  $('btnPurge').onclick = function () {
+    fetch('/logs/purge', { method: 'POST' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        $('lgWhy').textContent = '手动清理（删了 ' + ((d.removed || []).length) + ' 个）';
+        pull();
+        setTimeout(pull, 400);
+      })
+      .catch(function () {});
+  };
+
+  var es = new EventSource('/events');
+  es.onopen = function () { $('sConn').textContent = '已连接'; $('sConn').className = 'ok'; };
+  es.onerror = function () { $('sConn').textContent = '断开'; $('sConn').className = 'no'; };
+  es.onmessage = function () { pull(); };
+
+  pull();
+  setInterval(pull, 3000);
+})();
+</script>
+</body>
+</html>

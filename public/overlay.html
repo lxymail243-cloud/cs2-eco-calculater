@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CS2 对手经济推算</title>
+<link rel="icon" href="cs2bh.ico">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="aero-win">
+
+  <!-- Aero 标题栏。三个窗口按钮只是外观装饰，点了不做任何事（标题里有说明）。 -->
+  <div class="aero-titlebar">
+    <span class="aero-ico" aria-hidden="true"></span>
+    <span class="aero-title">CS2 对手经济推算</span>
+    <span class="aero-btns" aria-hidden="true">
+      <i class="aero-btn min" title="装饰按钮（仅外观）"></i>
+      <i class="aero-btn max" title="装饰按钮（仅外观）"></i>
+      <i class="aero-btn close" title="装饰按钮（仅外观）"></i>
+    </span>
+  </div>
+
+<div class="wrap">
+
+  <div class="top">
+    <div>
+      <div class="tier" id="tierLabel">等待数据</div>
+      <div class="tier-sub" id="tierNote">把 gamestate_integration 配置放进 CS2 的 cfg 目录后启动游戏</div>
+    </div>
+    <div class="top-right">
+      <div class="meta" id="roundMeta">—</div>
+      <div class="meta" id="scoreMeta">—</div>
+      <div class="conn" id="conn"><span class="dot"></span><span id="connText">未连接</span></div>
+    </div>
+  </div>
+
+  <div class="speech" id="speechBar">
+    <button id="spToggle" class="sp-btn">语音播报：关</button>
+    <label class="sp-item">嗓音
+      <select id="spVoice" class="sp-select"></select>
+    </label>
+    <label class="sp-item">语速
+      <input type="range" id="spRate" min="0.7" max="1.6" step="0.05" value="1.05">
+      <span class="sp-val" id="spRateVal">1.05x</span>
+    </label>
+    <button id="spTest" class="sp-btn ghost">试听</button>
+    <span class="sp-note" id="spNote"></span>
+  </div>
+
+  <div class="idle" id="idle">
+    <b>还没有收到 CS2 的数据</b>
+    1. 确认本服务正在运行（node server.js）<br>
+    2. 把 gamestate_integration_buyhelper.cfg 放进 CS2 的 game/csgo/cfg/ 目录<br>
+    3. 重启 CS2 并进入一局（5E / 官匹 / 休闲都行）<br>
+    4. 打几秒后本页会自动刷新
+  </div>
+
+  <div class="cols hidden" id="cols">
+    <div class="card">
+      <h2>我的状态</h2>
+      <div class="money" id="myMoney">$0</div>
+      <div class="row"><span class="k">主武器</span><span class="v" id="myGun">无</span></div>
+      <div class="row"><span class="k">护甲</span><span class="v" id="myArmor">无</span></div>
+      <div class="row"><span class="k">道具</span><span class="v" id="myNades">无</span></div>
+      <div class="row"><span class="k">拆弹器</span><span class="v" id="myKit">—</span></div>
+      <div class="row"><span class="k">我方连败</span><span class="v" id="myLoss">0</span></div>
+      <div class="row"><span class="k">本回合输可得</span><span class="v" id="myNextLoss">$1400</span></div>
+    </div>
+
+    <div class="card">
+      <h2>敌方推演 <span class="pill" id="enConf">—</span></h2>
+      <div class="row"><span class="k">对手阵营</span><span class="v" id="enFoe">—</span></div>
+      <div class="row"><span class="k">敌方经济</span><span class="v" id="enTier">—</span></div>
+      <div class="row"><span class="k">连败（本半场）</span><span class="v" id="enLoss">0</span></div>
+      <div class="row"><span class="k">本回合若输可得</span><span class="v" id="enIfLose">$1400</span></div>
+      <div class="row"><span class="k">本半场战绩</span><span class="v" id="enRecord">—</span></div>
+      <div class="row"><span class="k">人均累计收入</span><span class="v" id="enIncome">—</span></div>
+      <div class="row"><span class="k">人均资金上界</span><span class="v" id="enCeil">—</span></div>
+      <div class="enemy-verdict" id="enVerdict">—</div>
+      <details class="enemy-why"><summary>推算依据（点开看）</summary><ul id="enWhyList"></ul></details>
+    </div>
+  </div>
+
+  <div class="advice hidden" id="adviceBox">
+    <h2>说明</h2>
+    <ul id="adviceList"></ul>
+  </div>
+
+</div><!-- /.wrap -->
+
+</div><!-- /.aero-win -->
+
+<script src="render.js"></script>
+<script src="speech.js"></script>
+<script>
+(function () {
+  var es = new EventSource('/events');
+  es.onopen = function () { BuyHelperUI.setConn(true, '已连接'); };
+  es.onerror = function () { BuyHelperUI.setConn(false, '重连中'); };
+  es.onmessage = function (ev) {
+    var d;
+    try { d = JSON.parse(ev.data); } catch (e) { return; }
+    if (d.type === 'state') {
+      BuyHelperUI.render(d.analysis);
+      // 语音：只在购买倒计时里、每回合播一次
+      window.BuyHelperSpeech.maybeAnnounce(d.analysis);
+    }
+  };
+})();
+</script>
+</body>
+</html>

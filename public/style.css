@@ -1,0 +1,484 @@
+/* ==========================================================================
+   CS2 对手经济推算 · 界面样式
+   --------------------------------------------------------------------------
+   主题：Windows 7 Aero
+     · 背景  —— 纯 CSS 渐变模拟 Win7 的蓝色光晕桌面（不引任何图片）
+     · 窗口  —— 玻璃标题栏 + 圆角发光边框 + 右上三个窗口按钮
+     · 面板  —— "玻璃上的玻璃"：半透明白 + 内高光 + 外发光
+     · 文字  —— 深蓝墨色 + 白色柔光（Aero 招牌的文字发光）
+
+   两条实现要点：
+     1) Aero 玻璃是"双高光"——上部亮（反射天空）、中线附近转暗、底部回亮。
+        缺了中间那道"地平线"，就只是一块半透明白，不像 Aero。
+     2) 主题底色偏亮，所以文字与语义色统统取"深色版"。原来深色主题下
+        那套亮色（#3ecf8e 之类）放到浅玻璃上几乎看不见。
+
+   类名与选择器契约保持不变（render.js / speech.js 依赖）。
+   ========================================================================== */
+
+:root{
+  /* ---- 文字：玻璃亮，用深蓝墨色系保证对比度 ---- */
+  --txt:#0e2c47;
+  --muted:#3a5a78;
+  --dim:#55748f;
+
+  /* ---- 语义色：深色版 ---- */
+  --good:#0b7a3c;
+  --info:#0f5599;
+  --warn:#8f5406;
+  --bad:#ad1d1d;
+  --accent:#5438b0;
+  --tier-color:#0f5599;
+
+  --radius:7px;
+
+  /* 面板玻璃：上亮 → 中线转暗 → 底部回亮 */
+  --glass-panel:linear-gradient(to bottom,
+      rgba(255,255,255,.66) 0%,
+      rgba(243,251,255,.52) 38%,
+      rgba(214,234,251,.42) 50%,
+      rgba(226,242,254,.46) 58%,
+      rgba(246,253,255,.56) 100%);
+
+  /* 控件玻璃（按钮 / 下拉）：比面板更实，因为要可点 */
+  --glass-ctl:linear-gradient(to bottom,
+      rgba(255,255,255,.86) 0%,
+      rgba(238,248,255,.74) 46%,
+      rgba(208,230,250,.74) 52%,
+      rgba(228,244,255,.82) 100%);
+
+  --ctl-line:rgba(255,255,255,.80);
+  --ctl-shadow:inset 0 1px 0 rgba(255,255,255,.98),
+               0 1px 2px rgba(10,45,80,.22),
+               0 0 0 1px rgba(120,170,215,.30),
+               0 0 8px rgba(170,215,255,.35);
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+
+body{
+  min-height:100%;
+  /* ---- Win7 桌面壁纸：斜向光丝 + 中央光晕 + 深蓝底 ---- */
+  background-color:#08203a;
+  background-image:
+    repeating-linear-gradient(104deg, rgba(190,235,255,.055) 0 1px, transparent 1px 34px),
+    repeating-linear-gradient(96deg,  rgba(255,255,255,.030) 0 2px, transparent 2px 54px),
+    radial-gradient(ellipse 62% 40% at 50% 70%, rgba(186,238,255,.62) 0%, rgba(120,196,246,.30) 44%, transparent 74%),
+    radial-gradient(ellipse 108% 62% at 50% 86%, rgba(72,158,228,.55) 0%, rgba(30,100,170,.26) 48%, transparent 74%),
+    radial-gradient(circle at 50% 46%, rgba(40,110,180,.50) 0%, transparent 62%),
+    linear-gradient(to bottom, #08243f 0%, #0d3760 26%, #115080 48%, #0d3c66 68%, #061e35 100%);
+  background-attachment:fixed;
+  background-repeat:no-repeat;
+  background-size:cover;
+
+  color:var(--txt);
+  font-family:"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  font-size:14px;
+  line-height:1.5;
+  padding:26px 18px 36px;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ==========================================================================
+   Aero 窗口
+   ========================================================================== */
+
+.aero-win{
+  position:relative;
+  max-width:1040px;
+  margin:0 auto;
+  display:flex;
+  flex-direction:column;
+  padding-bottom:13px;
+  border-radius:8px 8px 6px 6px;
+  border:1px solid rgba(255,255,255,.62);
+  background:linear-gradient(to bottom,
+      rgba(255,255,255,.58) 0%,
+      rgba(238,248,255,.46) 46%,
+      rgba(216,234,251,.42) 50%,
+      rgba(228,242,254,.48) 100%);
+  -webkit-backdrop-filter:blur(16px) saturate(150%);
+  backdrop-filter:blur(16px) saturate(150%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.45),
+    inset 0 1px 0 rgba(255,255,255,.95),
+    0 2px 4px rgba(5,30,58,.30),
+    0 20px 46px rgba(4,26,50,.42),
+    0 0 30px rgba(150,205,255,.26);
+  overflow:hidden;
+}
+
+/* ---- 标题栏 ---- */
+.aero-titlebar{
+  flex:0 0 auto;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  height:32px;
+  padding:0 7px 0 12px;
+  border-bottom:1px solid rgba(126,168,205,.45);
+  background:linear-gradient(to bottom,
+      rgba(255,255,255,.66) 0%,
+      rgba(232,246,255,.54) 42%,
+      rgba(198,224,247,.48) 50%,
+      rgba(176,205,236,.44) 52%,
+      rgba(212,236,253,.52) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.95),
+    inset 0 -1px 0 rgba(255,255,255,.35);
+}
+
+/* 左上角小图标：一个准星 */
+.aero-ico{
+  position:relative;
+  flex:0 0 auto;
+  width:16px;height:16px;
+  border-radius:3px;
+  background:linear-gradient(to bottom, #9fd4f7, #3d86c4 52%, #2a6ba8);
+  box-shadow:0 0 0 1px rgba(255,255,255,.75), 0 1px 2px rgba(10,45,80,.4), inset 0 1px 0 rgba(255,255,255,.7);
+}
+.aero-ico::before,
+.aero-ico::after{
+  content:"";position:absolute;background:rgba(255,255,255,.95);
+}
+.aero-ico::before{left:50%;top:2.5px;bottom:2.5px;width:1.5px;margin-left:-.75px}
+.aero-ico::after{top:50%;left:2.5px;right:2.5px;height:1.5px;margin-top:-.75px}
+
+/* 标题：Aero 的招牌——深色字 + 白色柔光晕 */
+.aero-title{
+  font-size:12.5px;
+  font-weight:600;
+  color:#0c2b47;
+  letter-spacing:.02em;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  text-shadow:
+    0 0 3px rgba(255,255,255,1),
+    0 0 7px rgba(255,255,255,.95),
+    0 1px 1px rgba(255,255,255,.9);
+}
+
+/* ---- 右上三个窗口按钮（外观装饰）---- */
+.aero-btns{
+  display:flex;
+  gap:1px;
+  margin-left:auto;
+  flex:0 0 auto;
+}
+.aero-btn{
+  position:relative;
+  width:29px;height:19px;
+  border-radius:3px;
+  border:1px solid rgba(255,255,255,.72);
+  background:linear-gradient(to bottom,
+      rgba(255,255,255,.76) 0%,
+      rgba(226,242,255,.60) 45%,
+      rgba(188,216,243,.58) 50%,
+      rgba(208,232,251,.64) 56%,
+      rgba(240,249,255,.72) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.95),
+    0 1px 2px rgba(12,45,80,.28),
+    0 0 6px rgba(255,255,255,.55);
+  cursor:default;
+  transition:background .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+
+/* 最小化：一条横线 */
+.aero-btn.min::after{
+  content:"";position:absolute;left:8px;right:8px;bottom:5px;height:2px;
+  background:#1b4467;border-radius:1px;
+}
+/* 最大化：一个方框 */
+.aero-btn.max::after{
+  content:"";position:absolute;left:8px;right:8px;top:5px;bottom:4px;
+  border:1.5px solid #1b4467;border-radius:1px;border-top-width:3px;
+}
+/* 关闭：× */
+.aero-btn.close::after{
+  content:"\00d7";
+  position:absolute;inset:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:700;line-height:1;
+  color:#5c1620;
+  text-shadow:0 1px 0 rgba(255,255,255,.85);
+}
+
+/* Aero 按钮的 hover 发光——整块玻璃亮起来，这是最标志性的交互 */
+.aero-btn.min:hover,
+.aero-btn.max:hover{
+  background:linear-gradient(to bottom,#f2fbff,#c6e6ff 46%,#a8d8ff 52%,#dcf1ff);
+  border-color:rgba(255,255,255,.95);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,1),
+    0 0 10px rgba(120,200,255,.95),
+    0 0 20px rgba(90,180,255,.65);
+}
+.aero-btn.close:hover{
+  background:linear-gradient(to bottom,#ffb9a6,#f2674d 46%,#d63c22 54%,#ff9d89);
+  border-color:rgba(255,190,175,.95);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.85),
+    0 0 10px rgba(255,95,55,.95),
+    0 0 20px rgba(255,60,30,.7);
+}
+.aero-btn.close:hover::after{color:#fff;text-shadow:0 1px 1px rgba(120,20,0,.6)}
+
+/* ==========================================================================
+   内容区
+   ========================================================================== */
+
+.wrap{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  padding:13px;
+}
+
+/* ---- 玻璃面板（内容层：比窗口玻璃更实，保证文字读得清）---- */
+.top,
+.card,
+.advice,
+.speech,
+.idle,
+.banner{
+  background:var(--glass-panel);
+  border:1px solid rgba(255,255,255,.72);
+  border-radius:var(--radius);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.42),
+    inset 0 1px 0 rgba(255,255,255,.96),
+    inset 0 -1px 0 rgba(255,255,255,.32),
+    0 1px 2px rgba(8,40,72,.20),
+    0 6px 16px rgba(8,40,72,.22),
+    0 0 14px rgba(160,210,255,.20);
+}
+
+/* ---- 环境提示条（那是 GSI 没在拉数据之类）---- */
+.banner{
+  display:flex;align-items:center;gap:9px;
+  background:linear-gradient(to bottom,
+      rgba(255,251,222,.80) 0%,
+      rgba(255,243,186,.66) 50%,
+      rgba(255,248,206,.72) 100%);
+  border-color:rgba(255,255,255,.85);
+  color:#6b4a05;
+  padding:9px 14px;font-size:13px;
+  text-shadow:0 1px 0 rgba(255,255,255,.7);
+}
+.banner .dot2{
+  width:7px;height:7px;border-radius:50%;
+  background:#e0a020;flex-shrink:0;
+  box-shadow:0 0 6px rgba(224,160,32,.9), inset 0 0 2px rgba(255,255,255,.9);
+}
+
+/* ---- 顶部主结论 ---- */
+.top{
+  display:flex;align-items:stretch;gap:12px;
+  background:var(--glass-panel);
+  padding:16px 18px;
+  border-left:3px solid var(--tier-color);
+}
+.tier{
+  font-size:30px;font-weight:600;line-height:1.15;
+  letter-spacing:.01em;
+  color:var(--tier-color);
+  text-shadow:0 1px 0 rgba(255,255,255,.95), 0 0 12px rgba(255,255,255,.6);
+}
+.tier-sub{font-size:13px;color:var(--muted);margin-top:3px}
+.top-right{
+  margin-left:auto;text-align:right;
+  display:flex;flex-direction:column;justify-content:center;gap:6px;flex-shrink:0;
+}
+.meta{font-size:13px;color:var(--muted)}
+.meta b{color:var(--txt);font-weight:600}
+.conn{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:12px;color:var(--dim);justify-content:flex-end;
+}
+.dot{
+  width:7px;height:7px;border-radius:50%;
+  background:var(--bad);flex-shrink:0;
+  box-shadow:0 0 5px rgba(173,29,29,.7), inset 0 0 2px rgba(255,255,255,.8);
+}
+.conn.on .dot{
+  background:var(--good);
+  box-shadow:0 0 7px rgba(11,122,60,.85), inset 0 0 2px rgba(255,255,255,.9);
+}
+
+/* ---- 两栏 ---- */
+.cols{display:grid;grid-template-columns:1fr 1.15fr;gap:12px}
+@media(max-width:760px){.cols{grid-template-columns:1fr}}
+
+.card{
+  padding:14px 16px;
+  display:flex;flex-direction:column;gap:10px;
+}
+.card h2{
+  font-size:12px;font-weight:600;
+  color:var(--dim);
+  letter-spacing:.06em;text-transform:uppercase;
+  text-shadow:0 1px 0 rgba(255,255,255,.85);
+}
+
+.money{
+  font-size:26px;font-weight:600;color:var(--good);
+  font-variant-numeric:tabular-nums;line-height:1;
+  text-shadow:0 1px 0 rgba(255,255,255,.9);
+}
+.money small{font-size:13px;color:var(--muted);font-weight:400;margin-left:6px}
+
+.row{display:flex;justify-content:space-between;align-items:center;font-size:13px;gap:10px}
+.row .k{color:var(--muted)}
+.row .v{color:var(--txt);font-variant-numeric:tabular-nums;text-align:right}
+.v.on{color:var(--good)}
+.v.off{color:var(--dim)}
+
+/* ---- 说明 ---- */
+.advice{padding:14px 16px}
+.advice h2{
+  font-size:12px;font-weight:600;color:var(--dim);
+  letter-spacing:.06em;text-transform:uppercase;margin-bottom:9px;
+  text-shadow:0 1px 0 rgba(255,255,255,.85);
+}
+.advice ul{list-style:none;display:flex;flex-direction:column;gap:7px}
+.advice li{
+  font-size:13.5px;color:var(--txt);
+  padding-left:16px;position:relative;line-height:1.55;
+}
+.advice li::before{
+  content:"";position:absolute;left:3px;top:8px;
+  width:5px;height:5px;border-radius:50%;
+  background:var(--tier-color);opacity:.75;
+  box-shadow:0 0 4px rgba(255,255,255,.8);
+}
+.advice li.warn{color:var(--warn)}
+.advice li.warn::before{background:var(--warn);opacity:1}
+
+/* ---- 空态 ---- */
+.idle{
+  padding:26px;text-align:center;
+  color:var(--muted);font-size:13.5px;line-height:1.8;
+  border-style:dashed;
+  border-color:rgba(255,255,255,.75);
+}
+.idle b{color:var(--txt);font-weight:600;display:block;font-size:15px;margin-bottom:6px}
+.hidden{display:none!important}
+
+/* ---- 对手经济推算 ---- */
+.pill{
+  display:inline-block;
+  font-size:10.5px;font-weight:700;letter-spacing:.03em;
+  padding:2px 8px;border-radius:999px;
+  background:rgba(255,255,255,.60);
+  border:1px solid rgba(255,255,255,.85);
+  color:var(--muted);
+  vertical-align:middle;margin-left:6px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 1px 1px rgba(10,45,80,.16);
+}
+.pill.conf-high{background:linear-gradient(to bottom,rgba(226,255,240,.95),rgba(176,238,206,.88));color:#07612f;border-color:rgba(130,222,175,.9)}
+.pill.conf-mid{background:linear-gradient(to bottom,rgba(228,242,255,.95),rgba(186,218,248,.88));color:#0d4c8c;border-color:rgba(140,190,235,.9)}
+.pill.conf-low{background:linear-gradient(to bottom,rgba(255,246,222,.95),rgba(250,226,170,.88));color:#875004;border-color:rgba(238,205,140,.9)}
+
+.enemy-verdict{
+  font-size:12px;line-height:1.6;color:var(--muted);
+  border-left:2px solid rgba(255,255,255,.7);
+  padding:2px 0 2px 9px;margin-top:9px;
+}
+.enemy-verdict.strong{color:var(--txt);border-left-color:var(--good)}
+.enemy-why{margin-top:9px;font-size:11.5px;color:var(--dim)}
+.enemy-why summary{cursor:pointer;color:var(--muted);user-select:none;outline:none}
+.enemy-why summary:hover{color:var(--txt)}
+.enemy-why ul{margin:7px 0 0;padding-left:16px;display:flex;flex-direction:column;gap:5px}
+.enemy-why li{line-height:1.5}
+
+/* ==========================================================================
+   语音播报条（Aero 玻璃控件）
+   ========================================================================== */
+
+.speech{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:9px 14px;
+}
+
+.sp-btn{
+  font-family:inherit;font-size:12.5px;
+  color:var(--txt);
+  padding:5px 13px;
+  border-radius:4px;
+  border:1px solid var(--ctl-line);
+  background:var(--glass-ctl);
+  box-shadow:var(--ctl-shadow);
+  cursor:pointer;
+  transition:background .15s ease, box-shadow .15s ease, color .15s ease, transform .06s ease;
+}
+/* 玻璃按钮悬停时整块发蓝光 —— Aero 最标志性的交互反馈 */
+.sp-btn:hover{
+  background:linear-gradient(to bottom,#ffffff,#dcf0ff 46%,#b8ddff 52%,#e2f2ff);
+  color:#062a4a;
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 1px 3px rgba(10,45,80,.25),
+    0 0 0 1px rgba(90,155,215,.45),
+    0 0 14px rgba(110,190,255,.85),
+    0 0 26px rgba(110,190,255,.45);
+}
+.sp-btn:active{transform:translateY(1px);box-shadow:inset 0 2px 4px rgba(20,60,100,.35), 0 0 10px rgba(110,190,255,.6)}
+.sp-btn:disabled{opacity:.55;cursor:default;box-shadow:inset 0 1px 0 rgba(255,255,255,.7), 0 1px 1px rgba(10,45,80,.15)}
+.sp-btn.on{
+  background:linear-gradient(to bottom,#f0fff7,#abebc6 46%,#8adcb0 52%,#dcf8ea);
+  color:#065c2c;
+  border-color:rgba(255,255,255,.9);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.95),
+    0 0 0 1px rgba(60,180,120,.45),
+    0 0 14px rgba(70,220,140,.6);
+}
+.sp-btn.on:hover{
+  background:linear-gradient(to bottom,#ffffff,#c2f4d9 46%,#96e6bb 52%,#e4fdf0);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 0 0 1px rgba(50,175,110,.6),
+    0 0 16px rgba(80,235,150,.9),
+    0 0 30px rgba(80,235,150,.5);
+}
+.sp-btn.ghost{background:rgba(255,255,255,.34)}
+
+.sp-item{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)}
+.sp-select{
+  font-family:inherit;font-size:12.5px;
+  color:var(--txt);
+  padding:4px 8px;
+  border-radius:4px;
+  border:1px solid var(--ctl-line);
+  background:linear-gradient(to bottom,#ffffff,#eaf5ff 50%,#dbeefe);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 1px 2px rgba(10,45,80,.20),
+    0 0 0 1px rgba(120,170,215,.30);
+  max-width:200px;
+}
+.sp-item input[type=range]{width:110px;accent-color:var(--info)}
+.sp-item input[type=range]:disabled{opacity:.5}
+.sp-val{font-variant-numeric:tabular-nums;color:var(--txt);min-width:38px}
+.sp-note{flex:1;min-width:200px;color:var(--dim);font-size:11.5px;line-height:1.5}
+
+/* ---- Windows 滚动条（Aero 的浅蓝玻璃条）---- */
+::-webkit-scrollbar{width:15px;height:15px}
+::-webkit-scrollbar-track{background:rgba(255,255,255,.18)}
+::-webkit-scrollbar-thumb{
+  background:linear-gradient(to right,
+      rgba(255,255,255,.80) 0%, rgba(214,234,252,.72) 40%,
+      rgba(186,214,242,.70) 100%);
+  border:1px solid rgba(255,255,255,.85);
+  border-radius:8px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 0 6px rgba(150,200,245,.5);
+}
+::-webkit-scrollbar-thumb:hover{
+  background:linear-gradient(to right,#ffffff,#cfe8ff 40%,#a9d4f8 100%);
+  box-shadow:inset 0 1px 0 #fff, 0 0 10px rgba(110,190,255,.85);
+}
+
+/* 战术卡片 / 购买清单 / AI 简报的样式已随功能一起移除（文件备份见 backup/README.md） */

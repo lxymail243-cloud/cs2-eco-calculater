@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CS2 对手经济推算 · 界面预览</title>
+<link rel="icon" href="cs2bh.ico">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="aero-win">
+
+  <!-- Aero 标题栏。三个窗口按钮只是外观装饰，点了不做任何事（标题里有说明）。 -->
+  <div class="aero-titlebar">
+    <span class="aero-ico" aria-hidden="true"></span>
+    <span class="aero-title">CS2 对手经济推算 · 界面预览</span>
+    <span class="aero-btns" aria-hidden="true">
+      <i class="aero-btn min" title="装饰按钮（仅外观）"></i>
+      <i class="aero-btn max" title="装饰按钮（仅外观）"></i>
+      <i class="aero-btn close" title="装饰按钮（仅外观）"></i>
+    </span>
+  </div>
+
+<div class="wrap">
+
+  <div class="banner">
+    <span class="dot2"></span>
+    <span>这是界面预览：数据是<b>引擎真实输出</b>，每 4 秒切换一个场景，展示对手经济的各种推算结论
+    （满买反扑 / 存钱局 / 买不起长枪 / 手枪局 / 数据不全）。
+    语音播报在这里也能直接试（先点一下「语音播报」开关）。真实使用请打开 <b>overlay.html</b>。</span>
+  </div>
+
+  <div class="top">
+    <div>
+      <div class="tier" id="tierLabel">等待数据</div>
+      <div class="tier-sub" id="tierNote">对手经济推算的结论会显示在这里</div>
+    </div>
+    <div class="top-right">
+      <div class="meta" id="roundMeta">—</div>
+      <div class="meta" id="scoreMeta">—</div>
+      <div class="conn on" id="conn"><span class="dot"></span><span id="connText">预览模式</span></div>
+    </div>
+  </div>
+
+  <div class="speech" id="speechBar">
+    <button id="spToggle" class="sp-btn">语音播报：关</button>
+    <label class="sp-item">嗓音
+      <select id="spVoice" class="sp-select"></select>
+    </label>
+    <label class="sp-item">语速
+      <input type="range" id="spRate" min="0.7" max="1.6" step="0.05" value="1.05">
+      <span class="sp-val" id="spRateVal">1.05x</span>
+    </label>
+    <button id="spTest" class="sp-btn ghost">试听</button>
+    <span class="sp-note" id="spNote"></span>
+  </div>
+
+  <div class="idle hidden" id="idle"><b>还没有收到 CS2 的数据</b></div>
+
+  <div class="cols" id="cols">
+    <div class="card">
+      <h2>我的状态</h2>
+      <div class="money" id="myMoney">$0</div>
+      <div class="row"><span class="k">主武器</span><span class="v" id="myGun">无</span></div>
+      <div class="row"><span class="k">护甲</span><span class="v" id="myArmor">无</span></div>
+      <div class="row"><span class="k">道具</span><span class="v" id="myNades">无</span></div>
+      <div class="row"><span class="k">拆弹器</span><span class="v" id="myKit">—</span></div>
+      <div class="row"><span class="k">我方连败</span><span class="v" id="myLoss">0</span></div>
+      <div class="row"><span class="k">本回合输可得</span><span class="v" id="myNextLoss">$1400</span></div>
+    </div>
+
+    <div class="card">
+      <h2>敌方推演 <span class="pill" id="enConf">—</span></h2>
+      <div class="row"><span class="k">对手阵营</span><span class="v" id="enFoe">—</span></div>
+      <div class="row"><span class="k">敌方经济</span><span class="v" id="enTier">—</span></div>
+      <div class="row"><span class="k">连败（本半场）</span><span class="v" id="enLoss">0</span></div>
+      <div class="row"><span class="k">本回合若输可得</span><span class="v" id="enIfLose">$1400</span></div>
+      <div class="row"><span class="k">本半场战绩</span><span class="v" id="enRecord">—</span></div>
+      <div class="row"><span class="k">人均累计收入</span><span class="v" id="enIncome">—</span></div>
+      <div class="row"><span class="k">人均资金上界</span><span class="v" id="enCeil">—</span></div>
+      <div class="enemy-verdict" id="enVerdict">—</div>
+      <details class="enemy-why"><summary>推算依据（点开看）</summary><ul id="enWhyList"></ul></details>
+    </div>
+  </div>
+
+  <div class="advice" id="adviceBox">
+    <h2>说明</h2>
+    <ul id="adviceList"></ul>
+  </div>
+
+</div><!-- /.wrap -->
+
+</div><!-- /.aero-win -->
+
+<script src="render.js"></script>
+<script src="speech.js"></script>
+<script>window.BuyHelperPreview = true;</script>
+<script>
+(function () {
+  var B = window.BuyHelperUI;
+
+  // SAMPLES 不是手写的：由 tools/genpreview.js 调用真实引擎（lib/economy.js 的 analyze）
+  // 产出后嵌进来的，所以预览里看到的结论和推理链跟实际跑起来完全一致。
+  // 引擎改了想同步预览：重新跑一次 node tools/genpreview.js 即可。
+  var SAMPLES = [
+    {
+      "ts": 1792463916977,
+      "phase": "freezetime",
+      "roundNum": 2,
+      "roundIndex": 1,
+      "side": "T",
+      "notInMatch": "",
+      "inWarmup": false,
+      "notInMatchLabel": "",
+      "score": {
+        "ct": 0,
+        "t": 1
+      },
+      "mapName": "mirage",
+      "mapRaw": "de_mirage",
+      "bombPlanted": false,
+      "spectating": false,
+      "observed": null,
+      "me": {
+        "money": 3050,
+        "primary": false,
+        "primaryName": "",
+        "armor": 0,
+        "helmet": false,
+        "defuseKit": false,
+        "alive": true,
+        "grenades": {
+          "smoke": 0,
+          "flash": 0,
+          "fire": 0,
+          "he": 0,
+          "decoy": 0
+        }
+      },
+      "myTeam": {
+        "losses": 0,
+        "nextLossBonus": 1400
+      },
+      "enemy": {
+        "available": true,
+        "foe": "CT",
+        "halfStart": 0,
+        "endedThisHalf": 1,
+        "theirLosses": 1,
+        "ifLoseNow": 1900,
+        "costs": {
+          "full": 5300,
+          "combat": 3900,
+          "half": 1900
+        },
+        "mode": "competitive",
+        "modeRaw": "competitive",
+        "freeArmor": false,
+        "pistol": false,
+        "seq": [
+          {
+            "round": 0,
+            "winner": "T",
+            "planted": false
+          }
+        ],
+        "income": 3000,
+        "halfWins": 0,
+        "halfLosses": 1,
+        "unknownRounds": 0,
+        "coverage": 1,
+        "cashCeil": 3300,
+        "cashSave": 2500,
+        "killIncome": 300,
+        "killSource": "assumed",
+        "killsPerRound": null,
+        "killReward": 279,
+        "killRewardPistol": 300,
+        "killPistolRounds": 1,
+        "killObservedPlayers": 0,
+        "deathsPerRound": null,
+        "deathSource": "none",
+        "spendEst": null,
+        "cashLikely": null,
+        "bombWins": 0,
+        "plantLosses": 0,
+        "streak": 1,
+        "cumulativeLossBonus": 1400,
+        "why": [
+          "本半场已走完 1 回合，对手 0 胜 1 负。",
+          "对手人均累计收入至少 $3000（起始 $800 + 每回合基础 $800 × 1 + 胜负奖金）。这是硬算的，不含击杀奖励。",
+          "击杀收入按 $300 计：对手一回合最多拿 5 个人头（我们最多死 5 人），这几份奖励全队平分，所以人均每回合不超过「每杀平均奖励」。拿不到他们的击杀数（GSI 只在自己游玩时下发 allplayers，见 README），所以只能用这个上界。",
+          "每杀按多少算：普通回合 $279（按实测武器占比加权：AWP 只给 $100，会把均值拉低）；手枪局 $300（那一局只有手枪，没有 AWP 可拖）。本半场序列里有 1 个手枪局。",
+          "资金上界 $3300：假设对面一分钱都没花，再叠上上面那笔击杀收入。低于买枪门槛时就是硬结论。",
+          "就算他们一直在 eco 攒钱，也就 $2500 左右。",
+          "对手「步枪 + 甲盔」需要 $3900，满买需要 $5300。",
+          "对手当前连败 1 局，已经累计领了 $1400 的败方补偿；本回合若再输，每人再进账 $1900。"
+        ],
+        "conf": "high",
+        "tier": "FORCE_BUY",
+        "verdict": "对面这回合不可能人手一把长枪：资金上界 $3300 低于「步枪 + 甲盔」的 $3900 —— 最多是微冲或手枪加甲，除非靠上回合保下来的枪。",
+        "tierLabel": "强起",
+        "say": "对面买不起长枪，最多微冲加甲。",
+        "losses": 1
+      },
+      "advice": [
+        "对手已连败 1 局：本回合若再输，每人进账 $1900（败方补偿是固定阶梯，这个数是精确的，不是推算）。",
+        "对手经济：对面这回合不可能人手一把长枪：资金上界 $3300 低于「步枪 + 甲盔」的 $3900 —— 最多是微冲或手枪加甲，除非靠上回合保下来的枪。"
+      ]
+    },
+    {
+      "ts": 1792463916978,
+      "phase": "freezetime",
+      "roundNum": 2,
+      "roundIndex": 1,
+      "side": "T",
+      "notInMatch": "",
+      "inWarmup": false,
+      "notInMatchLabel": "",
+      "score": {
+        "ct": 0,
+        "t": 1
+      },
+      "mapName": "mirage",
+      "mapRaw": "de_mirage",
+      "bombPlanted": false,
+      "spectating": false,
+      "observed": null,
+      "me": {
+        "money": 1000,
+        "primary": false,
+        "primaryName": "",
+        "armor": 0,
+        "helmet": false,
+        "defuseKit": false,
+        "alive": true,
+        "grenades": {
+          "smoke": 0,
+          "flash": 0,
+          "fire": 0,
+          "he": 0,
+          "decoy": 0
+        }
+      },
+      "myTeam": {
+        "losses": 0,
+        "nextLossBonus": 1400
+      },
+      "enemy": {
+        "available": true,
+        "foe": "CT",
+        "halfStart": 0,
+        "endedThisHalf": 1,
+        "theirLosses": 1,
+        "ifLoseNow": 1900,
+        "costs": {
+          "full": 4300,
+          "combat": 2900,
+          "half": 1250
+        },
+        "mode": "casual",
+        "modeRaw": "casual",
+        "freeArmor": true,
+        "pistol": false,
+        "seq": [
+          {
+            "round": 0,
+            "winner": "T",
+            "planted": false
+          }
+        ],
+        "income": 3200,
+        "halfWins": 0,
+        "halfLosses": 1,
+        "unknownRounds": 0,
+        "coverage": 1,
+        "cashCeil": 3350,
+        "cashSave": 2700,
+        "killIncome": 150,
+        "killSource": "assumed",
+        "killsPerRound": null,
+        "killReward": 140,
+        "killRewardPistol": 150,
+        "killPistolRounds": 1,
+        "killObservedPlayers": 0,
+        "deathsPerRound": null,
+        "deathSource": "none",
+        "spendEst": null,
+        "cashLikely": null,
+        "bombWins": 0,
+        "plantLosses": 0,
+        "streak": 1,
+        "cumulativeLossBonus": 1400,
+        "why": [
+          "本半场已走完 1 回合，对手 0 胜 1 负。",
+          "对手人均累计收入至少 $3200（起始 $1000 + 每回合基础 $800 × 1 + 胜负奖金）。这是硬算的，不含击杀奖励。",
+          "击杀收入按 $150 计：对手一回合最多拿 5 个人头（我们最多死 5 人），这几份奖励全队平分，所以人均每回合不超过「每杀平均奖励」。拿不到他们的击杀数（GSI 只在自己游玩时下发 allplayers，见 README），所以只能用这个上界。",
+          "每杀按多少算：普通回合 $140（按实测武器占比加权：AWP 只给 $100，会把均值拉低）；手枪局 $150（那一局只有手枪，没有 AWP 可拖）。本半场序列里有 1 个手枪局。",
+          "资金上界 $3350：假设对面一分钱都没花，再叠上上面那笔击杀收入。低于买枪门槛时就是硬结论。",
+          "就算他们一直在 eco 攒钱，也就 $2700 左右。",
+          "对手「步枪」需要 $2900，满买需要 $4300。",
+          "这是**休闲局**（map.mode = casual）：起始 $1000、胜利 $2700、上限 $10000，击杀奖励减半，而且护甲每回合白送 —— 所以对面凑齐长枪只需要 $2900。数字和竞技不一样。",
+          "对手当前连败 1 局，已经累计领了 $1400 的败方补偿；本回合若再输，每人再进账 $1900。"
+        ],
+        "conf": "mid",
+        "tier": "ECO",
+        "verdict": "对面刚输一局，手上钱不多 —— 大概率存钱局，也可能赌一把强起，注意前期 rush。",
+        "tierLabel": "存钱局",
+        "say": "对面大概在存钱。",
+        "losses": 1
+      },
+      "advice": [
+        "对手已连败 1 局：本回合若再输，每人进账 $1900（败方补偿是固定阶梯，这个数是精确的，不是推算）。",
+        "对手经济：对面刚输一局，手上钱不多 —— 大概率存钱局，也可能赌一把强起，注意前期 rush。"
+      ]
+    },
+    {
+      "ts": 1792463916978,
+      "phase": "freezetime",
+      "roundNum": 9,
+      "roundIndex": 8,
+      "side": "T",
+      "notInMatch": "",
+      "inWarmup": false,
+      "notInMatchLabel": "",
+      "score": {
+        "ct": 4,
+        "t": 3
+      },
+      "mapName": "mirage",
+      "mapRaw": "de_mirage",
+      "bombPlanted": false,
+      "spectating": false,
+      "observed": null,
+      "me": {
+        "money": 6400,
+        "primary": false,
+        "primaryName": "",
+        "armor": 0,
+        "helmet": false,
+        "defuseKit": false,
+        "alive": true,
+        "grenades": {
+          "smoke": 1,
+          "flash": 2,
+          "fire": 0,
+          "he": 0,
+          "decoy": 0
+        }
+      },
+      "myTeam": {
+        "losses": 0,
+        "nextLossBonus": 1400
+      },
+      "enemy": {
+        "available": true,
+        "foe": "CT",
+        "halfStart": 0,
+        "endedThisHalf": 8,
+        "theirLosses": 2,
+        "ifLoseNow": 1400,
+        "costs": {
+          "full": 5300,
+          "combat": 3900,
+          "half": 1900
+        },
+        "mode": "competitive",
+        "modeRaw": "competitive",
+        "freeArmor": false,
+        "pistol": false,
+        "seq": [
+          {
+            "round": 0,
+            "winner": "CT",
+            "planted": false
+          },
+          {
+            "round": 1,
+            "winner": "CT",
+            "planted": false
+          },
+          {
+            "round": 2,
+            "winner": "CT",
+            "planted": false
+          },
+          {
+            "round": 3,
+            "winner": "CT",
+            "planted": false
+          },
+          {
+            "round": 4,
+            "winner": "T",
+            "planted": false
+          },
+          {
+            "round": 5,
+            "winner": "T",
+            "planted": false
+          },
+          {
+            "round": 6,
+            "winner": "T",
+            "planted": false
+          },
+          {
+            "round": 7,
+            "winner": "CT",
+            "planted": false
+          }
+        ],
+        "income": 29150,
+        "halfWins": 5,
+        "halfLosses": 3,
+        "unknownRounds": 0,
+        "coverage": 1,
+        "cashCeil": 16000,
+        "cashSave": 25150,
+        "killIncome": 2253,
+        "killSource": "assumed",
+        "killsPerRound": null,
+        "killReward": 279,
+        "killRewardPistol": 300,
+        "killPistolRounds": 1,
+        "killObservedPlayers": 0,
+        "deathsPerRound": null,
+        "deathSource": "none",
+        "spendEst": null,
+        "cashLikely": null,
+        "bombWins": 0,
+        "plantLosses": 0,
+        "streak": 0,
+        "cumulativeLossBonus": 0,
+        "why": [
+          "本半场已走完 8 回合，对手 5 胜 3 负。",
+          "对手人均累计收入至少 $29150（起始 $800 + 每回合基础 $800 × 8 + 胜负奖金）。这是硬算的，不含击杀奖励。",
+          "击杀收入按 $2253 计：对手一回合最多拿 5 个人头（我们最多死 5 人），这几份奖励全队平分，所以人均每回合不超过「每杀平均奖励」。拿不到他们的击杀数（GSI 只在自己游玩时下发 allplayers，见 README），所以只能用这个上界。",
+          "每杀按多少算：普通回合 $279（按实测武器占比加权：AWP 只给 $100，会把均值拉低）；手枪局 $300（那一局只有手枪，没有 AWP 可拖）。本半场序列里有 1 个手枪局。",
+          "资金上界 $16000：假设对面一分钱都没花，再叠上上面那笔击杀收入。低于买枪门槛时就是硬结论。",
+          "就算他们一直在 eco 攒钱，也就 $25150 左右。",
+          "对手「步枪 + 甲盔」需要 $3900，满买需要 $5300。"
+        ],
+        "conf": "mid",
+        "tier": "FULL_BUY",
+        "verdict": "对手刚赢（连败已清零），回合胜利的 $3250 已经到账 —— 大概率满买，正面要跟他们对拼装备。",
+        "tierLabel": "满买",
+        "say": "对面大概率满买，准备对拼。",
+        "losses": 2
+      },
+      "advice": [
+        "对手连败已清零 —— 上回合赢了，$3250 的胜利奖金已经到账。",
+        "对手经济：对手刚赢（连败已清零），回合胜利的 $3250 已经到账 —— 大概率满买，正面要跟他们对拼装备。"
+      ]
+    },
+    {
+      "ts": 1792463916979,
+      "phase": "freezetime",
+      "roundNum": 7,
+      "roundIndex": 6,
+      "side": "T",
+      "notInMatch": "",
+      "inWarmup": false,
+      "notInMatchLabel": "",
+      "score": {
+        "ct": 3,
+        "t": 3
+      },
+      "mapName": "inferno",
+      "mapRaw": "de_inferno",
+      "bombPlanted": false,
+      "spectating": false,
+      "observed": null,
+      "me": {
+        "money": 7000,
+        "primary": false,
+        "primaryName": "",
+        "armor": 100,
+        "helmet": true,
+        "defuseKit": false,
+        "alive": true,
+        "grenades": {
+          "smoke": 2,
+          "flash": 2,
+          "fire": 1,
+          "he": 0,
+          "decoy": 0
+        }
+      },
+      "myTeam": {
+        "losses": 0,
+        "nextLossBonus": 1400
+      },
+      "enemy": {
+        "available": true,
+        "foe": "CT",
+        "halfStart": 0,
+        "endedThisHalf": 6,
+        "theirLosses": 0,
+        "ifLoseNow": 2900,
+        "costs": {
+          "full": 5300,
+          "combat": 3900,
+          "half": 1900
+        },
+        "mode": "competitive",
+        "modeRaw": "competitive",
+        "freeArmor": false,
+        "pistol": false,
+        "seq": [
+          {
+            "round": 0,
+            "winner": "CT",
+            "planted": false
+          },
+          {
+            "round": 1,
+            "winner": "CT",
+            "planted": false
+          },
+          {
+            "round": 2,
+            "winner": "CT",
+            "planted": false
+          },
+          {
+            "round": 3,
+            "winner": "T",
+            "planted": false
+          },
+          {
+            "round": 4,
+            "winner": "T",
+            "planted": false
+          },
+          {
+            "round": 5,
+            "winner": "T",
+            "planted": false
+          }
+        ],
+        "income": 21050,
+        "halfWins": 3,
+        "halfLosses": 3,
+        "unknownRounds": 0,
+        "coverage": 1,
+        "cashCeil": 16000,
+        "cashSave": 18050,
+        "killIncome": 1695,
+        "killSource": "assumed",
+        "killsPerRound": null,
+        "killReward": 279,
+        "killRewardPistol": 300,
+        "killPistolRounds": 1,
+        "killObservedPlayers": 0,
+        "deathsPerRound": null,
+        "deathSource": "none",
+        "spendEst": null,
+        "cashLikely": null,
+        "bombWins": 0,
+        "plantLosses": 0,
+        "streak": 3,
+        "cumulativeLossBonus": 5700,
+        "why": [
+          "本半场已走完 6 回合，对手 3 胜 3 负。",
+          "对手人均累计收入至少 $21050（起始 $800 + 每回合基础 $800 × 6 + 胜负奖金）。这是硬算的，不含击杀奖励。",
+          "击杀收入按 $1695 计：对手一回合最多拿 5 个人头（我们最多死 5 人），这几份奖励全队平分，所以人均每回合不超过「每杀平均奖励」。拿不到他们的击杀数（GSI 只在自己游玩时下发 allplayers，见 README），所以只能用这个上界。",
+          "每杀按多少算：普通回合 $279（按实测武器占比加权：AWP 只给 $100，会把均值拉低）；手枪局 $300（那一局只有手枪，没有 AWP 可拖）。本半场序列里有 1 个手枪局。",
+          "资金上界 $16000：假设对面一分钱都没花，再叠上上面那笔击杀收入。低于买枪门槛时就是硬结论。",
+          "就算他们一直在 eco 攒钱，也就 $18050 左右。",
+          "对手「步枪 + 甲盔」需要 $3900，满买需要 $5300。",
+          "对手当前连败 3 局，已经累计领了 $5700 的败方补偿；本回合若再输，每人再进账 $2900。"
+        ],
+        "conf": "mid",
+        "tier": "FULL_BUY",
+        "verdict": "对面已经连败 3 局，败方补偿累计到每人 $5700 左右 —— 攒够了，这回合大概率满买强力反扑，别当他们是穷队。",
+        "tierLabel": "满买",
+        "say": "对面连败攒够钱了，这回合可能满买反扑。",
+        "losses": 0
+      },
+      "advice": [
+        "对手已连败 3 局：本回合若再输，每人进账 $2900（败方补偿是固定阶梯，这个数是精确的，不是推算）。",
+        "对手经济：对面已经连败 3 局，败方补偿累计到每人 $5700 左右 —— 攒够了，这回合大概率满买强力反扑，别当他们是穷队。"
+      ]
+    },
+    {
+      "ts": 1792463916979,
+      "phase": "freezetime",
+      "roundNum": 12,
+      "roundIndex": 11,
+      "side": "CT",
+      "notInMatch": "",
+      "inWarmup": false,
+      "notInMatchLabel": "",
+      "score": {
+        "ct": 5,
+        "t": 5
+      },
+      "mapName": "mirage",
+      "mapRaw": "de_mirage",
+      "bombPlanted": false,
+      "spectating": false,
+      "observed": null,
+      "me": {
+        "money": 1900,
+        "primary": false,
+        "primaryName": "",
+        "armor": 0,
+        "helmet": false,
+        "defuseKit": false,
+        "alive": true,
+        "grenades": {
+          "smoke": 0,
+          "flash": 0,
+          "fire": 0,
+          "he": 0,
+          "decoy": 0
+        }
+      },
+      "myTeam": {
+        "losses": 2,
+        "nextLossBonus": 2400
+      },
+      "enemy": {
+        "available": true,
+        "foe": "T",
+        "halfStart": 0,
+        "endedThisHalf": 11,
+        "theirLosses": 0,
+        "ifLoseNow": 1900,
+        "costs": {
+          "full": 4900,
+          "combat": 3700,
+          "half": 1700
+        },
+        "mode": "competitive",
+        "modeRaw": "competitive",
+        "freeArmor": false,
+        "pistol": false,
+        "seq": [
+          {
+            "round": 0,
+            "winner": "CT",
+            "planted": false
+          },
+          {
+            "round": 1,
+            "winner": "CT",
+            "planted": false
+          },
+          {
+            "round": 2,
+            "winner": "CT",
+            "planted": false
+          },
+          {
+            "round": 3,
+            "winner": "CT",
+            "planted": false
+          },
+          {
+            "round": 4,
+            "winner": "CT",
+            "planted": false
+          },
+          {
+            "round": 5,
+            "winner": "T",
+            "planted": false
+          },
+          {
+            "round": 6,
+            "winner": "T",
+            "planted": false
+          },
+          {
+            "round": 7,
+            "winner": "T",
+            "planted": false
+          },
+          {
+            "round": 8,
+            "winner": "T",
+            "planted": false
+          },
+          {
+            "round": 9,
+            "winner": "T",
+            "planted": false
+          },
+          {
+            "round": 10,
+            "winner": "CT",
+            "planted": false
+          }
+        ],
+        "income": 39250,
+        "halfWins": 5,
+        "halfLosses": 6,
+        "unknownRounds": 0,
+        "coverage": 1,
+        "cashCeil": 16000,
+        "cashSave": 33750,
+        "killIncome": 3090,
+        "killSource": "assumed",
+        "killsPerRound": null,
+        "killReward": 279,
+        "killRewardPistol": 300,
+        "killPistolRounds": 1,
+        "killObservedPlayers": 0,
+        "deathsPerRound": null,
+        "deathSource": "none",
+        "spendEst": null,
+        "cashLikely": null,
+        "bombWins": 0,
+        "plantLosses": 0,
+        "streak": 1,
+        "cumulativeLossBonus": 1400,
+        "why": [
+          "本半场已走完 11 回合，对手 5 胜 6 负。",
+          "对手人均累计收入至少 $39250（起始 $800 + 每回合基础 $800 × 11 + 胜负奖金）。这是硬算的，不含击杀奖励。",
+          "击杀收入按 $3090 计：对手一回合最多拿 5 个人头（我们最多死 5 人），这几份奖励全队平分，所以人均每回合不超过「每杀平均奖励」。拿不到他们的击杀数（GSI 只在自己游玩时下发 allplayers，见 README），所以只能用这个上界。",
+          "每杀按多少算：普通回合 $279（按实测武器占比加权：AWP 只给 $100，会把均值拉低）；手枪局 $300（那一局只有手枪，没有 AWP 可拖）。本半场序列里有 1 个手枪局。",
+          "资金上界 $16000：假设对面一分钱都没花，再叠上上面那笔击杀收入。低于买枪门槛时就是硬结论。",
+          "就算他们一直在 eco 攒钱，也就 $33750 左右。",
+          "对手「步枪 + 甲盔」需要 $3700，满买需要 $4900。",
+          "对手当前连败 1 局，已经累计领了 $1400 的败方补偿；本回合若再输，每人再进账 $1900。"
+        ],
+        "conf": "mid",
+        "tier": "ECO",
+        "verdict": "对面刚输一局，手上钱不多 —— 大概率存钱局，也可能赌一把强起，注意前期 rush。",
+        "tierLabel": "存钱局",
+        "say": "对面大概在存钱。",
+        "losses": 0
+      },
+      "advice": [
+        "对手已连败 1 局：本回合若再输，每人进账 $1900（败方补偿是固定阶梯，这个数是精确的，不是推算）。",
+        "对手经济：对面刚输一局，手上钱不多 —— 大概率存钱局，也可能赌一把强起，注意前期 rush。"
+      ]
+    },
+    {
+      "ts": 1792463916979,
+      "phase": "live",
+      "roundNum": 16,
+      "roundIndex": 15,
+      "side": "CT",
+      "notInMatch": "",
+      "inWarmup": false,
+      "notInMatchLabel": "",
+      "score": {
+        "ct": 8,
+        "t": 6
+      },
+      "mapName": "mirage",
+      "mapRaw": "de_mirage",
+      "bombPlanted": true,
+      "spectating": false,
+      "observed": null,
+      "me": {
+        "money": 4000,
+        "primary": true,
+        "primaryName": "M4A1-S",
+        "armor": 100,
+        "helmet": true,
+        "defuseKit": true,
+        "alive": true,
+        "grenades": {
+          "smoke": 1,
+          "flash": 2,
+          "fire": 0,
+          "he": 0,
+          "decoy": 0
+        }
+      },
+      "myTeam": {
+        "losses": 0,
+        "nextLossBonus": 1400
+      },
+      "enemy": {
+        "available": true,
+        "foe": "T",
+        "halfStart": 12,
+        "endedThisHalf": 3,
+        "theirLosses": 1,
+        "ifLoseNow": 1900,
+        "costs": {
+          "full": 4900,
+          "combat": 3700,
+          "half": 1700
+        },
+        "mode": "competitive",
+        "modeRaw": "competitive",
+        "freeArmor": false,
+        "pistol": false,
+        "seq": [
+          {
+            "round": 12,
+            "winner": "T",
+            "planted": false
+          },
+          {
+            "round": 13,
+            "winner": "T",
+            "planted": false
+          },
+          {
+            "round": 14,
+            "winner": "CT",
+            "planted": false
+          }
+        ],
+        "income": 11100,
+        "halfWins": 2,
+        "halfLosses": 1,
+        "unknownRounds": 0,
+        "coverage": 1,
+        "cashCeil": 11958,
+        "cashSave": 9600,
+        "killIncome": 858,
+        "killSource": "assumed",
+        "killsPerRound": null,
+        "killReward": 279,
+        "killRewardPistol": 300,
+        "killPistolRounds": 1,
+        "killObservedPlayers": 0,
+        "deathsPerRound": null,
+        "deathSource": "none",
+        "spendEst": null,
+        "cashLikely": null,
+        "bombWins": 0,
+        "plantLosses": 0,
+        "streak": 1,
+        "cumulativeLossBonus": 1400,
+        "why": [
+          "本半场已走完 3 回合，对手 2 胜 1 负。",
+          "对手人均累计收入至少 $11100（起始 $800 + 每回合基础 $800 × 3 + 胜负奖金）。这是硬算的，不含击杀奖励。",
+          "击杀收入按 $858 计：对手一回合最多拿 5 个人头（我们最多死 5 人），这几份奖励全队平分，所以人均每回合不超过「每杀平均奖励」。拿不到他们的击杀数（GSI 只在自己游玩时下发 allplayers，见 README），所以只能用这个上界。",
+          "每杀按多少算：普通回合 $279（按实测武器占比加权：AWP 只给 $100，会把均值拉低）；手枪局 $300（那一局只有手枪，没有 AWP 可拖）。本半场序列里有 1 个手枪局。",
+          "资金上界 $11958：假设对面一分钱都没花，再叠上上面那笔击杀收入。低于买枪门槛时就是硬结论。",
+          "就算他们一直在 eco 攒钱，也就 $9600 左右。",
+          "对手「步枪 + 甲盔」需要 $3700，满买需要 $4900。",
+          "对手当前连败 1 局，已经累计领了 $1400 的败方补偿；本回合若再输，每人再进账 $1900。"
+        ],
+        "conf": "mid",
+        "tier": "ECO",
+        "verdict": "对面刚输一局，手上钱不多 —— 大概率存钱局，也可能赌一把强起，注意前期 rush。",
+        "tierLabel": "存钱局",
+        "say": "对面大概在存钱。",
+        "losses": 1
+      },
+      "advice": [
+        "对手已连败 1 局：本回合若再输，每人进账 $1900（败方补偿是固定阶梯，这个数是精确的，不是推算）。",
+        "对手经济：对面刚输一局，手上钱不多 —— 大概率存钱局，也可能赌一把强起，注意前期 rush。"
+      ]
+    },
+    {
+      "ts": 1792463916979,
+      "phase": "freezetime",
+      "roundNum": 1,
+      "roundIndex": 0,
+      "side": "T",
+      "notInMatch": "",
+      "inWarmup": false,
+      "notInMatchLabel": "",
+      "score": {
+        "ct": 0,
+        "t": 0
+      },
+      "mapName": "mirage",
+      "mapRaw": "de_mirage",
+      "bombPlanted": false,
+      "spectating": false,
+      "observed": null,
+      "me": {
+        "money": 800,
+        "primary": false,
+        "primaryName": "",
+        "armor": 0,
+        "helmet": false,
+        "defuseKit": false,
+        "alive": true,
+        "grenades": {
+          "smoke": 0,
+          "flash": 0,
+          "fire": 0,
+          "he": 0,
+          "decoy": 0
+        }
+      },
+      "myTeam": {
+        "losses": 0,
+        "nextLossBonus": 1400
+      },
+      "enemy": {
+        "available": true,
+        "foe": "CT",
+        "halfStart": 0,
+        "endedThisHalf": 0,
+        "theirLosses": 0,
+        "ifLoseNow": 1400,
+        "costs": {
+          "full": 5300,
+          "combat": 3900,
+          "half": 1900
+        },
+        "mode": "competitive",
+        "modeRaw": "competitive",
+        "freeArmor": false,
+        "pistol": true,
+        "seq": [],
+        "tier": "PISTOL",
+        "tierLabel": "手枪局",
+        "conf": "high",
+        "cashCeil": 800,
+        "cashSave": 800,
+        "streak": 0,
+        "cumulativeLossBonus": 0,
+        "killIncome": 0,
+        "killSource": "pistol",
+        "killsPerRound": null,
+        "killReward": 300,
+        "killRewardPistol": 300,
+        "killPistolRounds": 1,
+        "deathsPerRound": null,
+        "deathSource": "none",
+        "spendEst": null,
+        "cashLikely": null,
+        "bombWins": 0,
+        "plantLosses": 0,
+        "verdict": "手枪局，双方都只有 $800 —— 对面买不了长枪，最多半甲加手枪或微冲。",
+        "why": [
+          "手枪局（本半场第 1 回合）双方起始资金固定 $800，这是规则不是推算。",
+          "对面能买的最贵配置是半甲 $650 加一把手枪。"
+        ],
+        "say": "对面手枪局，只有八百块。",
+        "losses": 0
+      },
+      "advice": [
+        "对手连败已清零 —— 上回合赢了，$3250 的胜利奖金已经到账。",
+        "对手经济：手枪局，双方都只有 $800 —— 对面买不了长枪，最多半甲加手枪或微冲。"
+      ]
+    }
+  ];
+
+  var i = 0;
+  function tick() {
+    var a = SAMPLES[i % SAMPLES.length];
+    i++;
+    B.render(a);
+    // 预览里也走一遍播报逻辑，方便确认语音是否正常
+    window.BuyHelperSpeech.maybeAnnounce(a);
+  }
+  tick();
+  setInterval(tick, 4000);
+})();
+</script>
+</body>
+</html>
